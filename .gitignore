@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+.anchor/
+test-ledger/
+*.log
+.DS_Store
+
+# keypairs / secrets - never commit these
+**/*-keypair.json
+**/authority.json
+.warden/

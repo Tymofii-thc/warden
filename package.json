@@ -1,0 +1,30 @@
+{
+  "name": "warden",
+  "version": "0.1.0",
+  "private": true,
+  "description": "On-chain risk-screening oracle for Solana wallets and transactions",
+  "scripts": {
+    "screen": "ts-node offchain/scorer/submit.ts",
+    "demo": "ts-node demo/index.ts --demo",
+    "live": "ts-node demo/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build:program": "cargo build-sbf --manifest-path programs/warden/Cargo.toml",
+    "test": "mocha -r ts-node/register --timeout 120000 tests/warden.ts"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.3",
+    "blessed": "^0.1.81",
+    "chalk": "^4.1.2",
+    "figlet": "^1.7.0"
+  },
+  "devDependencies": {
+    "@types/blessed": "^0.1.25",
+    "@types/chai": "^4.3.16",
+    "@types/mocha": "^10.0.7",
+    "@types/node": "^20.14.0",
+    "chai": "^4.4.1",
+    "mocha": "^10.6.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}
