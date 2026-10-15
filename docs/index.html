@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>WARDEN — on-chain risk-screening oracle</title>
+<meta name="description" content="Screen a Solana wallet's live transaction history against WARDEN's on-chain risk heuristics, in the browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><text y=%2219%22 font-size=%2220%22>%F0%9F%9B%A1%EF%B8%8F</text></svg>">
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="site">
+  <div class="wrap bar">
+    <a class="brand" href="#top">WARDEN <span class="dim">// risk oracle</span></a>
+    <nav><a href="https://github.com/Tymofii-thc/warden" rel="noopener">GitHub</a></nav>
+  </div>
+</header>
+
+<main class="wrap" id="top">
+  <h1>Screen a Solana wallet, live.</h1>
+  <p class="lead">
+    This page runs the same risk heuristics as WARDEN's on-chain oracle
+    (wallet age, transaction velocity, counterparty fan-out, flagged-program
+    interaction) directly against a public Solana RPC, in your browser. No
+    wallet connection, no signing, nothing is sent anywhere but a read-only
+    RPC call.
+  </p>
+
+  <div class="disclaimer">
+    Hackathon-grade heuristic demo, not a licensed AML/compliance product.
+    The "flagged program" list is an illustrative sample, not a real
+    sanctions or threat-intelligence feed. Do not use this as the sole basis
+    for a real compliance decision.
+  </div>
+
+  <div class="panel">
+    <h2 class="section">screen an address</h2>
+    <div class="row">
+      <input type="text" id="address" placeholder="paste a Solana wallet address, e.g. TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" autocomplete="off" spellcheck="false">
+      <select id="network">
+        <option value="devnet" selected>devnet</option>
+        <option value="mainnet">mainnet-beta</option>
+      </select>
+      <button class="primary" id="screenBtn">screen</button>
+    </div>
+    <div class="status" id="status"></div>
+
+    <div class="result" id="result" hidden>
+      <span class="badge" id="badge">ALLOW</span>
+      <div class="scoreline" id="scoreline"></div>
+      <div class="flags" id="flags"></div>
+      <ul class="reasons" id="reasons"></ul>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 class="section">how the score works</h2>
+    <p class="lead" style="margin-bottom:0">
+      Score 0-1000, higher is riskier. <b style="color:#35d17a">&lt;300 ALLOW</b> ·
+      <b style="color:#e0b84a">300-699 REVIEW</b> ·
+      <b style="color:#e2555a">&ge;700 BLOCK</b>.
+      Weights: no reachable history +250 (LOW_HISTORY), age &lt;3d +200
+      (NEW_WALLET), age 3-14d +80, &gt;80% of activity in the last 24h over
+      5+ txs +200 (HIGH_VELOCITY), &gt;90% unique counterparties over 5+
+      sampled txs +180 (MIXER_PATTERN), touches a sample flagged program
+      +300 (MIXER_PATTERN). Same weights as
+      <a href="https://github.com/Tymofii-thc/warden/blob/main/offchain/scorer/scoreEngine.ts">offchain/scorer/scoreEngine.ts</a>
+      and the same thresholds as
+      <a href="https://github.com/Tymofii-thc/warden/blob/main/sdk/src/decision.ts">sdk/src/decision.ts</a>.
+      A failed RPC call renders as <b style="color:#7d9499">UNSCORED</b>, never as a clean result.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h2 class="section">why this exists</h2>
+    <p class="lead" style="margin-bottom:0">
+      Colosseum's hackathon archive has 38 prior submissions in the
+      "institutional-rails" compliance category and zero of them shipped a
+      finished, working on-chain system - every one we found was explicitly
+      a mockup, a concept, or "scoping phase" by its own description. WARDEN
+      is the same idea, finished: a real Anchor program storing risk
+      attestations on devnet, a real scorer pulling live RPC history, and
+      this page, running the identical scoring logic client-side so anyone
+      can test it without installing anything.
+    </p>
+  </div>
+</main>
+
+<footer class="wrap">
+  <a href="https://github.com/Tymofii-thc/warden">github.com/Tymofii-thc/warden</a> · MIT
+</footer>
+</body>
+</html>
