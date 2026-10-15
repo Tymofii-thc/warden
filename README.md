@@ -7,6 +7,8 @@ review, or block an interaction - like a credit-bureau lookup, but fully
 on-chain, open, and backed by heuristics computed from real transaction
 history pulled live from Solana RPC.
 
+Live browser verifier (no install, runs the same heuristics client-side against live devnet RPC): **https://tymofii-thc.github.io/warden/**
+
 > **Disclaimer.** This is a hackathon-grade heuristic engine demonstrating
 > the architecture end-to-end. It is **not** a licensed AML/compliance
 > product and must not be used to make real regulatory or legal decisions
