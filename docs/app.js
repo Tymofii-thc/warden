@@ -39,12 +39,35 @@ const MAX_SCORE = 1000;
 
 let reqId = 1;
 
-async function rpc(rpcUrl, method, params) {
+const MAX_RETRIES = 5;
+const BASE_RETRY_DELAY_MS = 500;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// The free public RPC endpoints rate-limit aggressively. @solana/web3.js's
+// Connection class retries 429s internally by default (which is why the
+// Node CLI/demo recovers gracefully); this hand-written fetch wrapper has no
+// such safety net unless we add it ourselves, so we do here. A 429 after
+// MAX_RETRIES surfaces as a thrown error, which the caller renders as an
+// explicit UNSCORED result - never silently treated as a clean screening.
+async function rpc(rpcUrl, method, params, attempt = 0) {
   const res = await fetch(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: reqId++, method, params }),
   });
+
+  if (res.status === 429 || res.status >= 500) {
+    if (attempt >= MAX_RETRIES) throw new Error(`RPC HTTP ${res.status} after ${MAX_RETRIES} retries`);
+    const retryAfterHeader = Number(res.headers.get("retry-after"));
+    const delay = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+      ? retryAfterHeader * 1000
+      : BASE_RETRY_DELAY_MS * 2 ** attempt;
+    await sleep(delay);
+    return rpc(rpcUrl, method, params, attempt + 1);
+  }
   if (!res.ok) throw new Error(`RPC HTTP ${res.status}`);
   const json = await res.json();
   if (json.error) throw new Error(json.error.message || "RPC error");
