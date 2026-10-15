@@ -64,7 +64,17 @@ async function main() {
       }
       renderTally();
     } catch (err: any) {
-      ui.decisionBox.log(`{red-fg}error screening ${label}: ${err?.message ?? err}{/red-fg}`);
+      // A failed RPC call (rate limit, timeout, etc.) is not evidence that
+      // the wallet is clean or risky - it means we don't know. Count it as
+      // UNSCORED rather than silently dropping it, so an integrator watching
+      // the tally never mistakes "we couldn't check" for "we checked and it
+      // was fine".
+      tally.UNSCORED = (tally.UNSCORED ?? 0) + 1;
+      screened += 1;
+      ui.decisionBox.log(
+        `{grey-fg}{bold}[UNSCORED]{/bold}{/grey-fg} {red-fg}${address.toBase58().slice(0, 8)}... - screening failed: ${err?.message ?? err}{/red-fg}`
+      );
+      renderTally();
     }
   }
 
