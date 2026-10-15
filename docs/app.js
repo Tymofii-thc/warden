@@ -215,12 +215,39 @@ function looksLikeBase58Pubkey(s) {
 
 function el(id) { return document.getElementById(id); }
 
+const GAUGE_CIRCUMFERENCE = 2 * Math.PI * 85;
+const DECISION_COLOR = { ALLOW: "#35d17a", REVIEW: "#e0b84a", BLOCK: "#e2555a", UNSCORED: "#7d9499" };
+
+function animateGaugeNumber(from, to, ms) {
+  const start = performance.now();
+  const node = el("gaugeScore");
+  function tick(now) {
+    const t = Math.min(1, (now - start) / ms);
+    const eased = 1 - Math.pow(1 - t, 3);
+    node.textContent = Math.round(from + (to - from) * eased);
+    if (t < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function renderGauge(score, decision) {
+  const fill = el("gaugeFill");
+  const color = DECISION_COLOR[decision] || DECISION_COLOR.UNSCORED;
+  const offset = GAUGE_CIRCUMFERENCE * (1 - Math.min(score, MAX_SCORE) / MAX_SCORE);
+  fill.style.stroke = color;
+  // force a reflow so the transition always plays, even back-to-back
+  // eslint-disable-next-line no-unused-expressions
+  fill.getBoundingClientRect();
+  fill.style.strokeDashoffset = String(offset);
+  animateGaugeNumber(0, score, 900);
+}
+
 function render(decision, score, flags, reasons) {
   const box = el("result");
   box.hidden = false;
   el("badge").className = `badge ${decision}`;
   el("badge").textContent = decision;
-  el("scoreline").innerHTML = `risk score <b>${score}</b> / 1000`;
+  renderGauge(score, decision);
 
   const flagsBox = el("flags");
   flagsBox.innerHTML = "";
@@ -250,7 +277,7 @@ function renderUnscored(message) {
   box.hidden = false;
   el("badge").className = "badge UNSCORED";
   el("badge").textContent = "UNSCORED";
-  el("scoreline").textContent = "";
+  renderGauge(0, "UNSCORED");
   el("flags").innerHTML = "";
   el("reasons").innerHTML = "";
   const li = document.createElement("li");
@@ -264,6 +291,43 @@ function setStatus(text, isErr) {
   s.className = isErr ? "status err" : "status";
 }
 
+const STEP_KEYS = ["age", "velocity", "fanout", "flagged"];
+const STEP_TEXT_MAP = [
+  ["checking wallet age", "age"],
+  ["checking transaction velocity", "velocity"],
+  ["checking counterparty fan-out", "fanout"],
+  ["checking flagged-program interaction", "flagged"],
+];
+
+function pipelineStepEl(key) {
+  return document.querySelector(`.pipe-step[data-step="${key}"]`);
+}
+
+function resetPipeline() {
+  for (const key of STEP_KEYS) {
+    pipelineStepEl(key).className = "pipe-step";
+  }
+}
+
+function advancePipeline(stepText) {
+  const match = STEP_TEXT_MAP.find(([needle]) => stepText.startsWith(needle));
+  if (!match) return;
+  const key = match[1];
+  const idx = STEP_KEYS.indexOf(key);
+  for (let i = 0; i < idx; i++) pipelineStepEl(STEP_KEYS[i]).className = "pipe-step done";
+  pipelineStepEl(key).className = "pipe-step active";
+  return idx;
+}
+
+function failPipelineFrom(idx) {
+  if (idx == null || idx < 0) return;
+  pipelineStepEl(STEP_KEYS[idx]).className = "pipe-step failed";
+}
+
+function finishPipeline() {
+  for (const key of STEP_KEYS) pipelineStepEl(key).className = "pipe-step done";
+}
+
 async function onScreen() {
   const address = el("address").value.trim();
   const net = NETS[el("network").value];
@@ -271,18 +335,25 @@ async function onScreen() {
 
   el("result").hidden = true;
   setStatus("");
+  resetPipeline();
 
   if (!looksLikeBase58Pubkey(address)) {
     setStatus("that doesn't look like a base58 Solana address", true);
     return;
   }
 
+  let lastStepIdx = -1;
   btn.disabled = true;
   try {
-    const breakdown = await computeRiskScore(net.rpc, address, (step) => setStatus(`${step} (${net.label})`));
+    const breakdown = await computeRiskScore(net.rpc, address, (step) => {
+      lastStepIdx = advancePipeline(step);
+      setStatus(`${step} (${net.label})`);
+    });
+    finishPipeline();
     render(decisionForScore(breakdown.score), breakdown.score, breakdown.flags, breakdown.reasons);
     setStatus(`done - screened against live ${net.label} RPC just now`);
   } catch (err) {
+    failPipelineFrom(lastStepIdx);
     renderUnscored(err && err.message ? err.message : String(err));
     setStatus(`screening could not complete on ${net.label} - see UNSCORED result below, this is not a clean result`, true);
   } finally {
@@ -290,9 +361,81 @@ async function onScreen() {
   }
 }
 
+// ---------- animated background: a drifting node network ----------
+
+function initBackground() {
+  const canvas = el("bgCanvas");
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext("2d");
+  let w, h, nodes;
+  const NODE_COUNT = 46;
+  const LINK_DIST = 140;
+
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+  }
+
+  function makeNodes() {
+    nodes = Array.from({ length: NODE_COUNT }, () => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.25,
+      vy: (Math.random() - 0.5) * 0.25,
+    }));
+  }
+
+  function step() {
+    ctx.clearRect(0, 0, w, h);
+    for (const n of nodes) {
+      n.x += n.vx;
+      n.y += n.vy;
+      if (n.x < 0 || n.x > w) n.vx *= -1;
+      if (n.y < 0 || n.y > h) n.vy *= -1;
+    }
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[i].x - nodes[j].x;
+        const dy = nodes[i].y - nodes[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < LINK_DIST) {
+          ctx.strokeStyle = `rgba(45, 217, 217, ${0.12 * (1 - dist / LINK_DIST)})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(nodes[i].x, nodes[i].y);
+          ctx.lineTo(nodes[j].x, nodes[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+    for (const n of nodes) {
+      ctx.fillStyle = "rgba(45, 217, 217, 0.55)";
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    requestAnimationFrame(step);
+  }
+
+  resize();
+  makeNodes();
+  window.addEventListener("resize", () => {
+    resize();
+    makeNodes();
+  });
+  requestAnimationFrame(step);
+}
+
+const SAMPLE_ADDRESS = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
 document.addEventListener("DOMContentLoaded", () => {
+  initBackground();
   el("screenBtn").addEventListener("click", onScreen);
   el("address").addEventListener("keydown", (e) => {
     if (e.key === "Enter") onScreen();
+  });
+  el("trySample").addEventListener("click", () => {
+    el("address").value = SAMPLE_ADDRESS;
+    onScreen();
   });
 });
